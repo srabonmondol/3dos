@@ -3,38 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D OS</title>
+    <title>3D Experience</title>
+    <script src="https://threejs.org/build/three.js"></script>
+    <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; }
-        /* Add your styles here */
+        body { margin: 0; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
-    <h1>Welcome to the 3D OS</h1>
-    <div id="camera-controls">
-        <button id="rotate-left">Rotate Left</button>
-        <button id="rotate-right">Rotate Right</button>
-        <button id="zoom-in">Zoom In</button>
-        <button id="zoom-out">Zoom Out</button>
-    </div>
     <script>
-        // Fixing camera control functions
-        const cameraControls = document.getElementById('camera-controls');
-        cameraControls.addEventListener('click', (event) => {
-            switch (event.target.id) {
-                case 'rotate-left':
-                    // Logic to rotate the camera left
-                    break;
-                case 'rotate-right':
-                    // Logic to rotate the camera right
-                    break;
-                case 'zoom-in':
-                    // Logic to zoom in
-                    break;
-                case 'zoom-out':
-                    // Logic to zoom out
-                    break;
-            }
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        camera.position.set(0, 1, 5);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
     </script>
 </body>
