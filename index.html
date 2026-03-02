@@ -3,108 +3,564 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Srabon Advanced 3D Controller</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/loaders/FontLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/geometries/TextGeometry.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <title>Srabon Neural Controller</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: radial-gradient(circle at center, #111827 0%, #000000 100%); color: white; font-family: 'Inter', sans-serif; }
-        canvas { display: block; }
-        /* Sleeker UI Elements */
-        #video-container {
-            position: absolute;
-            bottom: 30px;
-            right: 30px;
-            width: 200px;
-            height: 150px;
-            border-radius: 16px;
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;700&family=Share+Tech+Mono&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
             overflow: hidden;
-            border: 1px solid rgba(0, 255, 255, 0.2);
-            box-shadow: 0 10px 30px rgba(0, 255, 255, 0.1);
-            transform: scaleX(-1);
-            backdrop-filter: blur(10px);
+            background: #000;
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
         }
-        .hud {
-            position: absolute;
-            top: 30px;
-            left: 30px;
+
+        #three-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg, transparent, transparent 2px,
+                rgba(0,0,0,0.025) 2px, rgba(0,0,0,0.025) 4px
+            );
             pointer-events: none;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            z-index: 10;
         }
-        .glass-badge {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+        /* ── LOADING SCREEN ── */
+        #loading {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
         }
+        #loading.hidden { opacity: 0; visibility: hidden; }
+        .ld-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 48px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00ffff, #7c3aed, #ff0080);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .ld-bar-wrap { width: 220px; height: 1px; background: rgba(255,255,255,0.08); }
+        .ld-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00ffff, #7c3aed);
+            transition: width 0.3s ease;
+        }
+        .ld-text {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 0.35em;
+            color: rgba(0,255,255,0.5);
+            animation: blink 1.4s infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+        /* ── CAMERA PERMISSION OVERLAY ── */
+        #cam-permission {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.92);
+            z-index: 150;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            backdrop-filter: blur(6px);
+        }
+        #cam-permission.visible { display: flex; }
+        .cam-icon {
+            width: 72px; height: 72px;
+            border: 1px solid rgba(0,255,255,0.3);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 30px rgba(0,255,255,0.15);
+            animation: cam-pulse 2s infinite;
+        }
+        @keyframes cam-pulse {
+            0%,100%{ box-shadow: 0 0 20px rgba(0,255,255,0.15); }
+            50%{ box-shadow: 0 0 40px rgba(0,255,255,0.35); }
+        }
+        .cam-icon svg { width: 32px; height: 32px; fill: none; stroke: #00ffff; stroke-width: 1.5; }
+        .cam-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 28px; font-weight: 700;
+            color: #fff; letter-spacing: 0.05em;
+        }
+        .cam-desc {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px; letter-spacing: 0.2em;
+            color: rgba(255,255,255,0.35);
+            text-align: center; max-width: 280px; line-height: 2;
+        }
+        #btn-allow {
+            padding: 12px 40px;
+            background: transparent;
+            border: 1px solid rgba(0,255,255,0.5);
+            border-radius: 4px;
+            color: #00ffff;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 0.3em;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        #btn-allow::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(0,255,255,0.06);
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+        }
+        #btn-allow:hover::before { transform: translateX(0); }
+        #btn-allow:hover { border-color: #00ffff; box-shadow: 0 0 20px rgba(0,255,255,0.2); }
+        #btn-no-cam {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 9px; letter-spacing: 0.2em;
+            color: rgba(255,255,255,0.2);
+            cursor: pointer; background: none; border: none;
+            text-decoration: underline; text-underline-offset: 3px;
+        }
+        #btn-no-cam:hover { color: rgba(255,255,255,0.4); }
+        .cam-error {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 9px; letter-spacing: 0.15em;
+            color: #ff4466; display: none;
+        }
+        .cam-error.visible { display: block; }
+
+        /* ── HUD ── */
+        .hud {
+            position: fixed; top: 32px; left: 32px;
+            z-index: 20; pointer-events: none;
+        }
+        .hud-eyebrow {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 9px; letter-spacing: 0.4em;
+            color: rgba(0,255,255,0.4); margin-bottom: 6px;
+        }
+        .hud-name {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 56px; font-weight: 700; line-height: 1;
+            background: linear-gradient(135deg, #00ffff 0%, #7c3aed 55%, #ff0080 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hud-sub {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 8px; letter-spacing: 0.3em;
+            color: rgba(255,255,255,0.25); margin-top: 8px;
+        }
+
+        /* ── STATUS ── */
+        #status-wrap {
+            position: fixed; top: 32px; right: 32px;
+            z-index: 20; pointer-events: none;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .sdot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #333; transition: background 0.4s, box-shadow 0.4s;
+        }
+        .sdot.active { background: #00ffff; box-shadow: 0 0 8px #00ffff; animation: sp 1.8s infinite; }
+        .sdot.error { background: #ff4466; box-shadow: 0 0 8px #ff4466; }
+        @keyframes sp { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        #status-text {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 9px; letter-spacing: 0.2em;
+            color: #444; transition: color 0.4s;
+        }
+        #status-text.linked { color: #00ffff; }
+        #status-text.err { color: #ff4466; }
+
+        /* ── DATA READOUT ── */
+        #data-readout {
+            position: fixed; right: 32px; bottom: 210px;
+            z-index: 20; pointer-events: none;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 9px; letter-spacing: 0.12em;
+            color: rgba(0,255,255,0.22);
+            text-align: right; line-height: 2;
+        }
+        #data-readout .val { color: rgba(0,255,255,0.55); }
+
+        /* ── GESTURE HINTS ── */
+        .hint-panel {
+            position: fixed; bottom: 32px; left: 32px;
+            z-index: 20; pointer-events: none;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 8px; color: rgba(255,255,255,0.15);
+            letter-spacing: 0.15em; line-height: 2.2;
+        }
+        .hint-panel .key { color: rgba(0,255,255,0.35); }
+
+        /* ── VIDEO FEED ── */
+        #video-container {
+            position: fixed; bottom: 32px; right: 32px;
+            width: 180px; height: 135px;
+            border-radius: 6px; overflow: hidden;
+            z-index: 20;
+            border: 1px solid rgba(0,255,255,0.18);
+            box-shadow: 0 0 25px rgba(0,255,255,0.06);
+        }
+        #video-container.hidden-cam { display: none; }
+        .vid-label {
+            position: absolute; top: 6px; left: 8px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 7px; letter-spacing: 0.2em;
+            color: rgba(0,255,255,0.5); z-index: 2; pointer-events: none;
+        }
+        #input_video {
+            width: 100%; height: 100%; object-fit: cover;
+            opacity: 0.6; filter: saturate(0.3) brightness(0.75);
+            transform: scaleX(-1); display: block;
+        }
+
+        /* ── HAND OVERLAY CANVAS ── */
+        #hand-canvas {
+            position: fixed; inset: 0;
+            pointer-events: none; z-index: 5;
+            opacity: 0; transition: opacity 0.4s;
+        }
+        #hand-canvas.visible { opacity: 1; }
+
+        /* ── CORNERS ── */
+        .corner {
+            position: fixed; width: 18px; height: 18px;
+            z-index: 20; pointer-events: none; opacity: 0.3;
+        }
+        .c-tl { top:14px; left:14px; border-top:1px solid #00ffff; border-left:1px solid #00ffff; }
+        .c-tr { top:14px; right:14px; border-top:1px solid #00ffff; border-right:1px solid #00ffff; }
+        .c-bl { bottom:14px; left:14px; border-bottom:1px solid #00ffff; border-left:1px solid #00ffff; }
+        .c-br { bottom:14px; right:14px; border-bottom:1px solid #00ffff; border-right:1px solid #00ffff; }
     </style>
 </head>
 <body>
 
-    <div class="hud">
-        <h1 class="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-500">
-            SRABON NEURAL
-        </h1>
-        <p class="text-gray-300 text-sm mt-1 tracking-wide">SYSTEM ACTIVE // GESTURE CONTROL</p>
-        <div id="status" class="mt-4 px-4 py-1.5 glass-badge rounded-full inline-block text-xs uppercase tracking-widest text-cyan-300 transition-colors duration-300">
-            Scanning for biometrics...
-        </div>
+<!-- ── Loading Screen ── -->
+<div id="loading">
+    <div class="ld-title">SRABON NEURAL</div>
+    <div class="ld-bar-wrap"><div class="ld-bar" id="ld-bar"></div></div>
+    <div class="ld-text" id="ld-text">INITIALIZING...</div>
+</div>
+
+<!-- ── Camera Permission Overlay ── -->
+<div id="cam-permission">
+    <div class="cam-icon">
+        <svg viewBox="0 0 24 24">
+            <path d="M23 7l-7 5 7 5V7z"/>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+        </svg>
     </div>
-
-    <div id="video-container">
-        <video id="input_video" class="w-full h-full object-cover opacity-70"></video>
+    <div class="cam-title">Enable Camera</div>
+    <div class="cam-desc">
+        GESTURE CONTROL REQUIRES<br>
+        CAMERA ACCESS TO TRACK<br>
+        YOUR HAND MOVEMENTS
     </div>
+    <button id="btn-allow">// GRANT ACCESS</button>
+    <div class="cam-error" id="cam-error">CAMERA ACCESS DENIED — CHECK BROWSER SETTINGS</div>
+    <button id="btn-no-cam">Continue without camera</button>
+</div>
 
-    <script>
-        const videoElement = document.getElementById('input_video');
-        const statusEl = document.getElementById('status');
-        
-        // --- THREE.JS ADVANCED SETUP ---
-        const scene = new THREE.Scene();
-        // Add subtle fog for depth
-        scene.fog = new THREE.FogExp2(0x000000, 0.005);
+<!-- ── Three.js Canvas ── -->
+<canvas id="three-canvas"></canvas>
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        document.body.appendChild(renderer.domElement);
+<!-- ── Hand Landmark Overlay ── -->
+<canvas id="hand-canvas"></canvas>
 
-        // --- ADVANCED LIGHTING ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
-        scene.add(ambientLight);
+<!-- ── HUD ── -->
+<div class="hud">
+    <div class="hud-eyebrow">// Neural Interface v3.0</div>
+    <div class="hud-name">SRABON</div>
+    <div class="hud-sub">GESTURE CONTROL SYSTEM</div>
+</div>
 
-        // Cyan Light
-        const light1 = new THREE.PointLight(0x00ffff, 2, 100);
-        scene.add(light1);
+<!-- ── Status ── -->
+<div id="status-wrap">
+    <div class="sdot" id="sdot"></div>
+    <div id="status-text">OFFLINE</div>
+</div>
 
-        // Purple Light
-        const light2 = new THREE.PointLight(0xff00ff, 2, 100);
-        scene.add(light2);
+<!-- ── Data Readout ── -->
+<div id="data-readout">
+    ROT&#8209;X <span class="val" id="dr-rx">0.000</span><br>
+    ROT&#8209;Y <span class="val" id="dr-ry">0.000</span><br>
+    ZOOM&nbsp;&nbsp; <span class="val" id="dr-z">60.0</span><br>
+    HAND&nbsp;&nbsp; <span class="val" id="dr-h">--</span>
+</div>
 
-        // --- PARTICLES (Data Dust) ---
-        const particlesGeometry = new THREE.BufferGeometry();
-        const particlesCount = 700;
-        const posArray = new Float32Array(particlesCount * 3);
-        
-        for(let i = 0; i < particlesCount * 3; i++) {
-            posArray[i] = (Math.random() - 0.5) * 150; // Spread over 150 units
-        }
-        
-        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-        const particlesMaterial = new THREE.PointsMaterial({
-            size: 0.3,
-            color: 0x00ffff,
-            transparent: true,
-            opacity: 0.5,
-            blending: THREE.AdditiveBlending
+<!-- ── Gesture Hints ── -->
+<div class="hint-panel">
+    <span class="key">Index Finger</span> → Rotate<br>
+    <span class="key">Pinch</span> → Zoom In/Out<br>
+    <span class="key">Open Palm</span> → Reset
+</div>
+
+<!-- ── Video Feed ── -->
+<div id="video-container">
+    <div class="vid-label">BIOMETRIC FEED</div>
+    <video id="input_video" playsinline muted></video>
+</div>
+
+<!-- ── Corner Decorators ── -->
+<div class="corner c-tl"></div>
+<div class="corner c-tr"></div>
+<div class="corner c-bl"></div>
+<div class="corner c-br"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  LOADING HELPERS
+// ═══════════════════════════════════════════════════
+const ldBar  = document.getElementById('ld-bar');
+const ldText = document.getElementById('ld-text');
+
+function setLoad(pct, msg) {
+    ldBar.style.width = pct + '%';
+    if (msg) ldText.textContent = msg;
+}
+
+setLoad(10, 'LOADING THREE.JS...');
+
+// ═══════════════════════════════════════════════════
+//  THREE.JS SCENE
+// ═══════════════════════════════════════════════════
+const canvas3d = document.getElementById('three-canvas');
+const scene    = new THREE.Scene();
+scene.fog      = new THREE.FogExp2(0x000000, 0.005);
+
+const cam3d = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
+cam3d.position.z = 60;
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 1);
+
+setLoad(25, 'BUILDING SCENE...');
+
+// ── Lighting ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.12));
+const cyanLight   = new THREE.PointLight(0x00ffff, 3.5, 130);
+const purpleLight = new THREE.PointLight(0x7c3aed, 3.5, 130);
+const pinkLight   = new THREE.PointLight(0xff0080, 1.5, 80);
+pinkLight.position.set(0, 30, 15);
+scene.add(cyanLight, purpleLight, pinkLight);
+
+// ── Particles ──
+const pCount = 1400;
+const pPos   = new Float32Array(pCount * 3);
+for (let i = 0; i < pCount * 3; i++) pPos[i] = (Math.random() - 0.5) * 220;
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+const particles = new THREE.Points(pGeo, new THREE.PointsMaterial({
+    size: 0.22, color: 0x00ffff, transparent: true,
+    opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false
+}));
+scene.add(particles);
+
+// ── Grid ──
+const grid = new THREE.GridHelper(200, 40, 0x001122, 0x001122);
+grid.position.y = -22;
+grid.material.opacity = 0.25;
+grid.material.transparent = true;
+scene.add(grid);
+
+setLoad(40, 'LOADING FONT...');
+
+// ── Text Group ──
+const textGroup = new THREE.Group();
+scene.add(textGroup);
+
+// Font load
+const fontLoader = new THREE.FontLoader();
+fontLoader.load(
+    'https://threejs.org/examples/fonts/helvetiker_bold.typeface.json',
+    (font) => {
+        setLoad(70, 'BUILDING MESH...');
+
+        const geo = new THREE.TextGeometry('Srabon', {
+            font, size: 10, height: 3, curveSegments: 32,
+            bevelEnabled: true, bevelThickness: 0.6,
+            bevelSize: 0.3, bevelOffset: 0, bevelSegments: 10
         });
-        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
-        scene.add(particlesMesh);
+        geo.computeBoundingBox();
+        geo.center();
 
+        const mat = new THREE.MeshPhysicalMaterial({
+            color: 0x080818,
+            metalness: 0.95, roughness: 0.12,
+            clearcoat: 1.0, clearcoatRoughness: 0.05,
+            emissive: new THREE.Color(0x00102a),
+            emissiveIntensity: 0.9
+        });
+
+        textGroup.add(new THREE.Mesh(geo, mat));
+        textGroup.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+            color: 0x00ffff, wireframe: true,
+            transparent: true, opacity: 0.03, depthWrite: false
+        })));
+
+        setLoad(95, 'ALMOST READY...');
+        setTimeout(() => {
+            setLoad(100, 'READY');
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+                showCamPrompt();
+            }, 400);
+        }, 300);
+    },
+    undefined,
+    () => {
+        // Font failed — still continue
+        setLoad(100, 'READY');
+        setTimeout(() => {
+            document.getElementById('loading').classList.add('hidden');
+            showCamPrompt();
+        }, 500);
+    }
+);
+
+// ═══════════════════════════════════════════════════
+//  STATUS HELPERS
+// ═══════════════════════════════════════════════════
+const sdot       = document.getElementById('sdot');
+const statusText = document.getElementById('status-text');
+
+function setStatus(state, msg) {
+    statusText.textContent = msg;
+    statusText.className   = state;          // 'linked' | 'err' | ''
+    sdot.className         = 'sdot' + (state === 'linked' ? ' active' : state === 'err' ? ' error' : '');
+}
+
+// ═══════════════════════════════════════════════════
+//  HAND CANVAS
+// ═══════════════════════════════════════════════════
+const handCanvas = document.getElementById('hand-canvas');
+const hCtx       = handCanvas.getContext('2d');
+
+function resizeHandCanvas() {
+    handCanvas.width  = innerWidth;
+    handCanvas.height = innerHeight;
+}
+resizeHandCanvas();
+
+// ═══════════════════════════════════════════════════
+//  CAMERA PERMISSION PROMPT
+// ═══════════════════════════════════════════════════
+const camPermEl = document.getElementById('cam-permission');
+const camErrEl  = document.getElementById('cam-error');
+const videoEl   = document.getElementById('input_video');
+
+function showCamPrompt() {
+    camPermEl.classList.add('visible');
+    setStatus('', 'AWAITING PERMISSION');
+}
+
+document.getElementById('btn-allow').addEventListener('click', async () => {
+    camErrEl.classList.remove('visible');
+    const btn = document.getElementById('btn-allow');
+    btn.textContent = '// REQUESTING...';
+    btn.disabled = true;
+
+    try {
+        // Trigger browser permission dialog
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        // Release immediately — MediaPipe Camera util will reopen it
+        stream.getTracks().forEach(t => t.stop());
+
+        camPermEl.classList.remove('visible');
+        initHandTracking();
+    } catch (err) {
+        console.warn('Camera denied:', err);
+        camErrEl.classList.add('visible');
+        btn.textContent = '// TRY AGAIN';
+        btn.disabled = false;
+        setStatus('err', 'PERMISSION DENIED');
+    }
+});
+
+document.getElementById('btn-no-cam').addEventListener('click', () => {
+    camPermEl.classList.remove('visible');
+    document.getElementById('video-container').classList.add('hidden-cam');
+    setStatus('', 'AUTO MODE');
+});
+
+// ═══════════════════════════════════════════════════
+//  MEDIAPIPE HAND TRACKING
+// ═══════════════════════════════════════════════════
+let targetRotX = 0;
+let targetRotY = 0;
+let targetZoom = 60;
+let isTracking = false;
+let lastSeen   = 0;
+
+// All 21-landmark connections
+const CONNECTIONS = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [0,9],[9,10],[10,11],[11,12],
+    [0,13],[13,14],[14,15],[15,16],
+    [0,17],[17,18],[18,19],[19,20],
+    [5,9],[9,13],[13,17]
+];
+
+function onHandResults(results) {
+    hCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        isTracking = true;
+        lastSeen   = Date.now();
+        handCanvas.classList.add('visible');
+        setStatus('linked', 'LINK ESTABLISHED');
+
+        const lms       = results.multiHandLandmarks[0];
+        const indexTip  = lms[8];
+        const thumbTip  = lms[4];
+
+        // Mirror X (video element is CSS-mirrored, but landmark coords are not)
+        const mx = 1 - indexTip.x;
+
+        // Map finger position → rotation targets
+        targetRotY = (mx - 0.5) * 7;
+        targetRotX = (indexTip.y - 0.5) * 5;
+
+        // Pinch → zoom
+        const pinch = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
+        targetZoom  = Math.max(22, Math.min(100, 100 - pinch * 170));
+
+        // Open palm → reset
+        if (countFingersUp(
         // --- 3D TEXT ---
         let textMesh;
         const loader = new THREE.FontLoader();
