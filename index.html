@@ -3,37 +3,247 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Experience</title>
-    <script src="https://threejs.org/build/three.js"></script>
-    <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+    <title>Srabon Advanced 3D Controller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/geometries/TextGeometry.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <style>
-        body { margin: 0; }
+        body { margin: 0; overflow: hidden; background: radial-gradient(circle at center, #111827 0%, #000000 100%); color: white; font-family: 'Inter', sans-serif; }
         canvas { display: block; }
+        /* Sleeker UI Elements */
+        #video-container {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 200px;
+            height: 150px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            box-shadow: 0 10px 30px rgba(0, 255, 255, 0.1);
+            transform: scaleX(-1);
+            backdrop-filter: blur(10px);
+        }
+        .hud {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            pointer-events: none;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .glass-badge {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body>
+
+    <div class="hud">
+        <h1 class="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-500">
+            SRABON NEURAL
+        </h1>
+        <p class="text-gray-300 text-sm mt-1 tracking-wide">SYSTEM ACTIVE // GESTURE CONTROL</p>
+        <div id="status" class="mt-4 px-4 py-1.5 glass-badge rounded-full inline-block text-xs uppercase tracking-widest text-cyan-300 transition-colors duration-300">
+            Scanning for biometrics...
+        </div>
+    </div>
+
+    <div id="video-container">
+        <video id="input_video" class="w-full h-full object-cover opacity-70"></video>
+    </div>
+
     <script>
+        const videoElement = document.getElementById('input_video');
+        const statusEl = document.getElementById('status');
+        
+        // --- THREE.JS ADVANCED SETUP ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
+        // Add subtle fog for depth
+        scene.fog = new THREE.FogExp2(0x000000, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        camera.position.set(0, 1, 5);
+        // --- ADVANCED LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+        scene.add(ambientLight);
+
+        // Cyan Light
+        const light1 = new THREE.PointLight(0x00ffff, 2, 100);
+        scene.add(light1);
+
+        // Purple Light
+        const light2 = new THREE.PointLight(0xff00ff, 2, 100);
+        scene.add(light2);
+
+        // --- PARTICLES (Data Dust) ---
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 700;
+        const posArray = new Float32Array(particlesCount * 3);
+        
+        for(let i = 0; i < particlesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 150; // Spread over 150 units
+        }
+        
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.3,
+            color: 0x00ffff,
+            transparent: true,
+            opacity: 0.5,
+            blending: THREE.AdditiveBlending
+        });
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        // --- 3D TEXT ---
+        let textMesh;
+        const loader = new THREE.FontLoader();
+        
+        loader.load('https://threejs.org/examples/fonts/helvetiker_bold.typeface.json', function (font) {
+            const textGeometry = new THREE.TextGeometry('Srabon', {
+                font: font,
+                size: 12,
+                height: 4,
+                curveSegments: 32, // Smoother curves
+                bevelEnabled: true,
+                bevelThickness: 0.8,
+                bevelSize: 0.4,
+                bevelOffset: 0,
+                bevelSegments: 8 // Smoother bevels
+            });
+
+            textGeometry.computeBoundingBox();
+            textGeometry.center();
+
+            // Premium Physical Material (Looks like polished metal/glass)
+            const material = new THREE.MeshPhysicalMaterial({ 
+                color: 0x111111,
+                metalness: 0.8,
+                roughness: 0.2,
+                clearcoat: 1.0,
+                clearcoatRoughness: 0.1,
+                emissive: 0x002244,
+                emissiveIntensity: 0.5
+            });
+
+            textMesh = new THREE.Mesh(textGeometry, material);
+            scene.add(textMesh);
+        });
+
+        // --- SMOOTHING VARIABLES ---
+        // Instead of snapping, we target these values and ease into them
+        let targetRotationX = 0;
+        let targetRotationY = 0;
+        let targetZoom = 60;
+        camera.position.z = 60;
+
+        // --- HAND TRACKING LOGIC ---
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                statusEl.innerText = "Link Established";
+                statusEl.style.borderColor = "rgba(0, 255, 255, 0.5)";
+                statusEl.style.color = "#00ffff";
+                
+                const hand = results.multiHandLandmarks[0];
+                const indexTip = hand[8];
+                const thumbTip = hand[4];
+
+                // Update TARGET rotation instead of actual rotation
+                targetRotationY = (indexTip.x - 0.5) * 5;
+                targetRotationX = (indexTip.y - 0.5) * 5;
+
+                // Update TARGET zoom
+                const distance = Math.sqrt(
+                    Math.pow(indexTip.x - thumbTip.x, 2) + 
+                    Math.pow(indexTip.y - thumbTip.y, 2)
+                );
+
+                targetZoom = Math.max(30, Math.min(90, 100 - (distance * 150)));
+
+            } else {
+                statusEl.innerText = "Signal Lost...";
+                statusEl.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                statusEl.style.color = "#9ca3af";
+                
+                // Slowly return to center if hand is removed
+                targetRotationX = 0;
+                targetRotationY = 0;
+                targetZoom = 60;
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7, // Slightly higher confidence for stability
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        const cameraFeed = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        cameraFeed.start();
+
+        // --- ANIMATION LOOP ---
+        const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
-            controls.update();
+            const elapsedTime = clock.getElapsedTime();
+
+            if(textMesh) {
+                // LERP (Linear Interpolation) for buttery smooth movement
+                textMesh.rotation.x += (targetRotationX - textMesh.rotation.x) * 0.1;
+                textMesh.rotation.y += (targetRotationY - textMesh.rotation.y) * 0.1;
+                camera.position.z += (targetZoom - camera.position.z) * 0.1;
+
+                // Subtle organic floating effect added on top of user control
+                textMesh.position.y = Math.sin(elapsedTime * 1.5) * 1.5;
+            }
+
+            // Animate Lights revolving around the text
+            light1.position.x = Math.sin(elapsedTime * 0.5) * 30;
+            light1.position.z = Math.cos(elapsedTime * 0.5) * 30;
+            light1.position.y = Math.sin(elapsedTime * 0.8) * 20;
+
+            light2.position.x = Math.sin(elapsedTime * 0.7 + Math.PI) * 30;
+            light2.position.z = Math.cos(elapsedTime * 0.7 + Math.PI) * 30;
+            light2.position.y = Math.cos(elapsedTime * 0.9) * 20;
+
+            // Animate Particles
+            particlesMesh.rotation.y = elapsedTime * 0.05;
+            particlesMesh.rotation.x = elapsedTime * 0.02;
+
             renderer.render(scene, camera);
         }
-        animate();
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        animate();
     </script>
 </body>
 </html>
