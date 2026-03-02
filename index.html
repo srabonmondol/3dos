@@ -2,108 +2,145 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SRABON | Android Gesture</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Hand Gesture Controller</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/loaders/FontLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/geometries/TextGeometry.js"></script>
-
     <style>
-        body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: #050505; color: white; font-family: sans-serif; }
         canvas { display: block; }
-        #camera-feed {
-            position: absolute; bottom: 15px; left: 15px; width: 100px; height: 130px;
-            border: 2px solid #00f2ff; border-radius: 10px; overflow: hidden;
-            transform: scaleX(-1); z-index: 20; background: #111;
+        #video-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 240px;
+            height: 180px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid rgba(255,255,255,0.2);
+            transform: scaleX(-1); /* Mirror camera */
         }
-        #intro-screen {
-            position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; background: #000;
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
         }
-        .neon-glow { color: #00f2ff; text-shadow: 0 0 15px #00f2ff; }
     </style>
 </head>
 <body>
 
-    <div id="intro-screen">
-        <h1 class="text-5xl font-black neon-glow mb-4 italic">SRABON</h1>
-        <p class="text-gray-500 mb-8 font-mono text-xs tracking-widest uppercase">Android AR Interface</p>
-        <button id="start-engine" class="px-10 py-4 border-2 border-cyan-400 text-cyan-400 font-bold rounded-full active:bg-cyan-400 active:text-black transition-all">
-            START CAMERA
-        </button>
+    <div class="hud">
+        <h1 class="text-3xl font-bold tracking-tighter text-cyan-400">NEURAL GESTURE</h1>
+        <p class="text-gray-400 text-sm">Move hand to rotate • Pinch to zoom</p>
+        <div id="status" class="mt-4 px-3 py-1 bg-white/10 rounded-full inline-block text-xs uppercase tracking-widest">
+            Initializing Camera...
+        </div>
     </div>
 
-    <div id="camera-feed">
-        <video id="input_video" class="w-full h-full object-cover" playsinline></video>
+    <div id="video-container">
+        <video id="input_video" class="w-full h-full object-cover"></video>
     </div>
 
     <script>
         const videoElement = document.getElementById('input_video');
-        const startBtn = document.getElementById('start-engine');
-        const intro = document.getElementById('intro-screen');
+        const statusEl = document.getElementById('status');
         
-        let scene, camera, renderer, textMesh, hands;
+        // --- THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-        function initApp() {
-            // 1. Scene setup
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        // Create a cool 3D Object
+        const geometry = new THREE.TorusKnotGeometry(10, 3, 100, 16);
+        const material = new THREE.MeshNormalMaterial({ wireframe: true });
+        const torusKnot = new THREE.Mesh(geometry, material);
+        scene.add(torusKnot);
+
+        // Lighting
+        const light = new THREE.PointLight(0xffffff, 1, 100);
+        light.position.set(0, 0, 10);
+        scene.add(light);
+
+        camera.position.z = 40;
+
+        // --- HAND TRACKING LOGIC ---
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                statusEl.innerText = "Hand Detected";
+                statusEl.classList.replace('bg-white/10', 'bg-cyan-500/20');
+                
+                const hand = results.multiHandLandmarks[0];
+                
+                // Index finger tip is landmark 8
+                const indexTip = hand[8];
+                const thumbTip = hand[4];
+
+                // ROTATION: Use Index finger position
+                // Mapping 0-1 range to rotation
+                torusKnot.rotation.y = (indexTip.x - 0.5) * 4;
+                torusKnot.rotation.x = (indexTip.y - 0.5) * 4;
+
+                // ZOOM: Calculate distance between thumb and index (Pinch)
+                const distance = Math.sqrt(
+                    Math.pow(indexTip.x - thumbTip.x, 2) + 
+                    Math.pow(indexTip.y - thumbTip.y, 2)
+                );
+
+                // Adjust camera Z based on pinch (0.05 is roughly a closed pinch)
+                const zoomFactor = Math.max(15, Math.min(60, 80 - (distance * 150)));
+                camera.position.z = zoomFactor;
+
+            } else {
+                statusEl.innerText = "No Hand Detected";
+                statusEl.classList.replace('bg-cyan-500/20', 'bg-white/10');
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+
+        const cameraFeed = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        cameraFeed.start();
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            // Constant subtle drift
+            torusKnot.rotation.z += 0.005;
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            document.body.appendChild(renderer.domElement);
+        });
 
-            // 2. Light
-            scene.add(new THREE.AmbientLight(0xffffff, 1));
-            
-            // 3. Load "SRABON" Text
-            const fontLoader = new THREE.FontLoader();
-            fontLoader.load('https://threejs.org/examples/fonts/helvetiker_bold.typeface.json', (font) => {
-                const geo = new THREE.TextGeometry('SRABON', {
-                    font: font, size: 8, height: 2, curveSegments: 4,
-                    bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.1
-                });
-                geo.center();
-                const mat = new THREE.MeshNormalMaterial();
-                textMesh = new THREE.Mesh(geo, mat);
-                scene.add(textMesh);
-            });
-
-            camera.position.z = 50;
-
-            // 4. MediaPipe for Android
-            hands = new Hands({
-                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-            });
-
-            hands.setOptions({
-                maxNumHands: 1,
-                modelComplexity: 0, // Critical for Android performance
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-
-            hands.onResults((results) => {
-                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0 && textMesh) {
-                    const hand = results.multiHandLandmarks[0];
-                    const index = hand[8]; // Index finger tip
-                    const thumb = hand[4]; // Thumb tip
-
-                    // Map hand movement to 3D rotation
-                    textMesh.rotation.y = (index.x - 0.5) * 4;
-                    textMesh.rotation.x = (index.y - 0.5) * 4;
-
-                    // Pinch logic for Zoom
-                    const dist = Math.hypot(index.x - thumb.x, index.y - thumb.y);
-                    camera.position.z = 80 - (dist * 150);
-                }
-            });
-
-            const cam = new Camera(videoElement, {
-                onFrame: async () => { await hands.send({image: videoElement}); },
+        animate();
+    </script>
+</body>
+</html>
                 width: 480, height: 640
             });
             cam.start();
